@@ -31,6 +31,10 @@ export default class GameScene extends Phaser.Scene {
   _buildBackground(level) {
     const bgKey = `bg-${level.id}`;
     this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, bgKey);
+
+    // Lava strip — visible through ground gaps, always lethal
+    const lava = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT - 8, GAME_WIDTH, 16, 0xff4500).setDepth(1);
+    this.tweens.add({ targets: lava, alpha: 0.7, duration: 350, yoyo: true, repeat: -1 });
   }
 
   _buildPlatforms(level) {
@@ -51,8 +55,10 @@ export default class GameScene extends Phaser.Scene {
     const spawnY = (level.platforms[0]?.y || GAME_HEIGHT - 60) - 40;
 
     this.player = this.physics.add.sprite(spawnX, spawnY, 'player');
+    this.physics.world.setBoundsCollision(true, true, true, false); // open bottom for lava
     this.player.setCollideWorldBounds(true);
-    this.player.setMaxVelocity(PHYSICS.playerSpeed * 2, 600);
+    this.player.setMaxVelocity(PHYSICS.playerSpeed, 600);
+    this.player.setDragX(1000);
     this.spawnX = spawnX;
     this.spawnY = spawnY;
 
@@ -89,7 +95,9 @@ export default class GameScene extends Phaser.Scene {
 
     (level.butterflies || []).forEach(b => {
       const bf = this.butterflies.create(b.x, b.y, 'butterfly');
-      bf.setVelocityX(80);
+      const speed = b.speed || 80;
+      bf.setVelocityX(speed);
+      bf.patrolSpeed = speed;
       bf.patrolStartX = b.x - b.range;
       bf.patrolEndX = b.x + b.range;
       bf.body.allowGravity = false;
@@ -201,13 +209,13 @@ export default class GameScene extends Phaser.Scene {
       || this._touchJump;
 
     if (goLeft) {
-      this.player.setVelocityX(-PHYSICS.playerSpeed);
+      this.player.setAccelerationX(-1200);
       this.player.setFlipX(true);
     } else if (goRight) {
-      this.player.setVelocityX(PHYSICS.playerSpeed);
+      this.player.setAccelerationX(1200);
       this.player.setFlipX(false);
     } else {
-      this.player.setVelocityX(0);
+      this.player.setAccelerationX(0);
     }
 
     if (jumpPressed && onGround) {
@@ -218,18 +226,18 @@ export default class GameScene extends Phaser.Scene {
     // Butterfly patrol
     this.butterflies?.getChildren().forEach(bf => {
       if (bf.x >= bf.patrolEndX) {
-        bf.setVelocityX(-80);
+        bf.setVelocityX(-bf.patrolSpeed);
         bf.setFlipX(true);
       } else if (bf.x <= bf.patrolStartX) {
-        bf.setVelocityX(80);
+        bf.setVelocityX(bf.patrolSpeed);
         bf.setFlipX(false);
       }
     });
 
     this._touchJump = false;
 
-    if (this.player.y > GAME_HEIGHT + 50) {
-      this._loseLife();
+    if (this.player.y > GAME_HEIGHT) {
+      this._restartLevel(); // lava = instant death
     }
   }
 

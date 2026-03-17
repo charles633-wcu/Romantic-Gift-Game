@@ -22,7 +22,7 @@ export default class PreloaderScene extends Phaser.Scene {
     this.load.audio('jump', 'assets/sounds/jump.wav');
     this.load.audio('levelComplete', 'assets/sounds/level-complete.wav');
 
-    this.load.json('levels', '/src/config/levels.json');
+    this.load.json('levels', 'src/config/levels.json');
   }
 
   create() {
