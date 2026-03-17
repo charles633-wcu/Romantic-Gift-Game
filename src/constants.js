@@ -17,4 +17,6 @@ export const COLORS = {
   butterfly: 0xc084fc,
   ground: 0x86efac,
   sky: 0xbfdbfe,
+  player: 0xff4d79,
+  butterflyBody: 0x7c3aed,
 };

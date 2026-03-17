@@ -5,7 +5,7 @@ export default class PreloaderScene extends Phaser.Scene {
 
   preload() {
     // Loading bar background
-    const barBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 400, 20, 0x333333);
+    this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 400, 20, 0x333333);
     const bar = this.add.rectangle(GAME_WIDTH / 2 - 200, GAME_HEIGHT / 2, 0, 20, 0xff69b4);
     bar.setOrigin(0, 0.5);
 
@@ -14,26 +14,21 @@ export default class PreloaderScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     this.load.on('progress', (value) => { bar.width = 400 * value; });
+    this.load.on('loaderror', () => { /* silently ignore missing assets */ });
 
     // Load sounds if available (fail silently if missing)
     this.load.audio('bgm', 'assets/sounds/bgm.mp3');
     this.load.audio('collect', 'assets/sounds/collect.wav');
     this.load.audio('jump', 'assets/sounds/jump.wav');
     this.load.audio('levelComplete', 'assets/sounds/level-complete.wav');
+
+    this.load.json('levels', '/src/config/levels.json');
   }
 
   create() {
     this._createTextures();
-
-    fetch('src/config/levels.json')
-      .then(r => r.json())
-      .then(data => {
-        this.scene.start('MenuScene', { levels: data.levels });
-      })
-      .catch(() => {
-        // Fallback: start with empty levels so game doesn't crash
-        this.scene.start('MenuScene', { levels: [] });
-      });
+    const data = this.cache.json.get('levels');
+    this.scene.start('MenuScene', { levels: data ? data.levels : [] });
   }
 
   _createTextures() {
@@ -49,7 +44,7 @@ export default class PreloaderScene extends Phaser.Scene {
 
     // Player heart body (32×34) — heart shape + legs
     g.clear();
-    g.fillStyle(0xff4d79);
+    g.fillStyle(COLORS.player);
     g.fillCircle(10, 10, 10);
     g.fillCircle(22, 10, 10);
     g.fillTriangle(2, 14, 30, 14, 16, 28);
@@ -79,7 +74,7 @@ export default class PreloaderScene extends Phaser.Scene {
     g.fillStyle(COLORS.butterfly);
     g.fillEllipse(8, 14, 14, 20);   // left wing
     g.fillEllipse(24, 14, 14, 20);  // right wing
-    g.fillStyle(0x7c3aed);
+    g.fillStyle(COLORS.butterflyBody);
     g.fillRect(14, 8, 4, 18);        // body
     g.generateTexture('butterfly', 32, 32);
 
@@ -100,10 +95,10 @@ export default class PreloaderScene extends Phaser.Scene {
     bgColors.forEach(([top, bottom], i) => {
       g.clear();
       g.fillStyle(top);
-      g.fillRect(0, 0, 800, 225);
+      g.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT / 2);
       g.fillStyle(bottom);
-      g.fillRect(0, 225, 800, 225);
-      g.generateTexture(`bg-${i + 1}`, 800, 450);
+      g.fillRect(0, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT / 2);
+      g.generateTexture(`bg-${i + 1}`, GAME_WIDTH, GAME_HEIGHT);
     });
 
     g.destroy();

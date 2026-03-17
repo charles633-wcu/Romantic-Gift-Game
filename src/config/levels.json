@@ -2,7 +2,7 @@
   "levels": [
     {
       "id": 1,
-      "background": "level-1",
+      "background": "bg-1",
       "note": "Every love story is beautiful, but ours is my favourite. 💕",
       "platforms": [
         { "x": 0, "y": 420, "w": 800, "h": 30 },
