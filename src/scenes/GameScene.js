@@ -22,6 +22,7 @@ export default class GameScene extends Phaser.Scene {
     this._buildPlayer(level);
     this._buildHearts(level);
     this._buildButterflies(level);
+    this._buildGoombas(level);
     this._buildGoalPortal(level);
     this._buildHUD(level);
     this._setupControls();
@@ -39,13 +40,33 @@ export default class GameScene extends Phaser.Scene {
 
   _buildPlatforms(level) {
     this.platforms = this.physics.add.staticGroup();
+    this.movingPlatforms = this.physics.add.group();
 
     level.platforms.forEach(p => {
-      const tilesNeeded = Math.ceil(p.w / 32);
-      for (let i = 0; i < tilesNeeded; i++) {
-        const tile = this.platforms.create(p.x + i * 32 + 16, p.y + p.h / 2, 'platform');
-        tile.setDisplaySize(32, p.h);
-        tile.refreshBody();
+      if (p.moving) {
+        const tilesNeeded = Math.ceil(p.w / 32);
+        for (let i = 0; i < tilesNeeded; i++) {
+          const tile = this.movingPlatforms.create(
+            p.x + i * 32 + 16,
+            p.y + (p.h || 15) / 2,
+            'platform-moving'
+          );
+          tile.setDisplaySize(32, p.h || 15);
+          tile.body.allowGravity = false;
+          tile.body.immovable = true;
+          tile.body.setSize(32, p.h || 15);
+          tile.startX   = p.x + i * 32 + 16;
+          tile.moveRange = p.moveRange || 80;
+          tile.moveSpeed = p.moveSpeed || 60;
+          tile.moveDir   = 1;
+        }
+      } else {
+        const tilesNeeded = Math.ceil(p.w / 32);
+        for (let i = 0; i < tilesNeeded; i++) {
+          const tile = this.platforms.create(p.x + i * 32 + 16, p.y + p.h / 2, 'platform');
+          tile.setDisplaySize(32, p.h);
+          tile.refreshBody();
+        }
       }
     });
   }
@@ -63,6 +84,7 @@ export default class GameScene extends Phaser.Scene {
     this.spawnY = spawnY;
 
     this.physics.add.collider(this.player, this.platforms);
+    this.physics.add.collider(this.player, this.movingPlatforms);
 
     this.isInvincible = false;
   }
@@ -106,6 +128,33 @@ export default class GameScene extends Phaser.Scene {
 
     this.physics.add.overlap(this.player, this.butterflies, () => {
       this._loseLife();
+    });
+  }
+
+  _buildGoombas(level) {
+    this.goombas = this.physics.add.group();
+
+    (level.goombas || []).forEach(g => {
+      const goomba = this.goombas.create(g.x, g.y, 'goomba');
+      const speed = g.speed || 60;
+      goomba.setVelocityX(speed);
+      goomba.patrolSpeed  = speed;
+      goomba.patrolStartX = g.x - g.range;
+      goomba.patrolEndX   = g.x + g.range;
+      goomba.body.allowGravity = false;
+      goomba.body.immovable    = true;
+    });
+
+    this.physics.add.overlap(this.player, this.goombas, (player, goomba) => {
+      if (this.isInvincible) return;
+      // Stomp: player falling and centre above goomba centre
+      if (player.body.velocity.y > 50 && player.y < goomba.y) {
+        goomba.destroy();
+        this.player.setVelocityY(-320); // bounce up
+        try { this.sound.play('collect', { volume: 0.5 }); } catch (_) {}
+      } else {
+        this._loseLife();
+      }
     });
   }
 
@@ -231,6 +280,24 @@ export default class GameScene extends Phaser.Scene {
       } else if (bf.x <= bf.patrolStartX) {
         bf.setVelocityX(bf.patrolSpeed);
         bf.setFlipX(false);
+      }
+    });
+
+    // Moving platform patrol
+    this.movingPlatforms?.getChildren().forEach(tile => {
+      if (tile.x >= tile.startX + tile.moveRange) tile.moveDir = -1;
+      if (tile.x <= tile.startX - tile.moveRange) tile.moveDir =  1;
+      tile.body.setVelocityX(tile.moveDir * tile.moveSpeed);
+    });
+
+    // Goomba patrol
+    this.goombas?.getChildren().forEach(g => {
+      if (g.x >= g.patrolEndX) {
+        g.setVelocityX(-g.patrolSpeed);
+        g.setFlipX(true);
+      } else if (g.x <= g.patrolStartX) {
+        g.setVelocityX(g.patrolSpeed);
+        g.setFlipX(false);
       }
     });
 

@@ -101,6 +101,28 @@ export default class PreloaderScene extends Phaser.Scene {
       g.generateTexture(`bg-${i + 1}`, GAME_WIDTH, GAME_HEIGHT);
     });
 
+    // Moving platform tile (32×15) — brighter pink to distinguish
+    g.clear();
+    g.fillStyle(COLORS.movingPlatform);
+    g.fillRect(0, 0, 32, 11);
+    g.fillStyle(0xff66aa);
+    g.fillRect(0, 11, 32, 4);
+    g.generateTexture('platform-moving', 32, 15);
+
+    // Goomba (28×26) — round orange enemy, stompable
+    g.clear();
+    g.fillStyle(COLORS.goomba);
+    g.fillCircle(14, 12, 12);       // round body
+    g.fillStyle(0x000000);
+    g.fillCircle(9,  9, 2);         // left eye
+    g.fillCircle(19, 9, 2);         // right eye
+    g.fillRect(10, 16, 2, 2);       // frown left
+    g.fillRect(16, 16, 2, 2);       // frown right
+    g.fillStyle(COLORS.goomba);
+    g.fillRect(6,  21, 6, 5);       // left foot
+    g.fillRect(16, 21, 6, 5);       // right foot
+    g.generateTexture('goomba', 28, 26);
+
     g.destroy();
   }
 }

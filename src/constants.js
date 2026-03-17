@@ -4,9 +4,9 @@ export const GAME_WIDTH = 800;
 export const GAME_HEIGHT = 450;
 
 export const PHYSICS = {
-  gravityY: 800,
+  gravityY: 1000,
   playerSpeed: 200,
-  jumpVelocity: -500,
+  jumpVelocity: -460,
 };
 
 export const COLORS = {
@@ -19,4 +19,6 @@ export const COLORS = {
   sky: 0xbfdbfe,
   player: 0xff4d79,
   butterflyBody: 0x7c3aed,
+  goomba: 0xff8c42,
+  movingPlatform: 0xff99cc,
 };
