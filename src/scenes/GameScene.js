@@ -22,6 +22,7 @@ export default class GameScene extends Phaser.Scene {
     this._buildPlayer(level);
     this._buildHearts(level);
     this._buildButterflies(level);
+    this._buildGoalPortal(level);
     this._buildHUD(level);
     this._setupControls();
     this._setupMobileControls();
@@ -98,6 +99,40 @@ export default class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.butterflies, () => {
       this._loseLife();
     });
+  }
+
+  _buildGoalPortal(level) {
+    const goal = this.physics.add.staticImage(level.goal.x, level.goal.y, 'heart-goal');
+    goal.body.setSize(40, 40);
+
+    this.tweens.add({
+      targets: goal,
+      scaleX: 1.1,
+      scaleY: 1.1,
+      duration: 700,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
+    this.physics.add.overlap(this.player, goal, () => {
+      if (this._levelComplete) return;
+      this._levelComplete = true;
+
+      try { this.sound.play('levelComplete', { volume: 0.7 }); } catch (_) {}
+
+      this.player.setVelocity(0, 0);
+      this.player.body.enable = false;
+
+      this.time.delayedCall(800, () => {
+        this.scene.start('LoveNoteScene', {
+          levels: this.levels,
+          levelIndex: this.levelIndex,
+        });
+      });
+    });
+
+    this._levelComplete = false;
   }
 
   _buildHUD(level) {
