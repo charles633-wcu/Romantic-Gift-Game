@@ -21,6 +21,7 @@ export default class GameScene extends Phaser.Scene {
     this._buildPlatforms(level);
     this._buildPlayer(level);
     this._buildHearts(level);
+    this._buildButterflies(level);
     this._buildHUD(level);
     this._setupControls();
     this._setupMobileControls();
@@ -79,6 +80,23 @@ export default class GameScene extends Phaser.Scene {
       this.heartsCollected++;
       this.heartsText.setText(`💕 ${this.heartsCollected} / ${(level.hearts || []).length}`);
       try { this.sound.play('collect', { volume: 0.6 }); } catch (_) {}
+    });
+  }
+
+  _buildButterflies(level) {
+    this.butterflies = this.physics.add.group();
+
+    (level.butterflies || []).forEach(b => {
+      const bf = this.butterflies.create(b.x, b.y, 'butterfly');
+      bf.setVelocityX(80);
+      bf.patrolStartX = b.x - b.range;
+      bf.patrolEndX = b.x + b.range;
+      bf.body.allowGravity = false;
+      bf.body.immovable = true;
+    });
+
+    this.physics.add.overlap(this.player, this.butterflies, () => {
+      this._loseLife();
     });
   }
 
@@ -161,6 +179,17 @@ export default class GameScene extends Phaser.Scene {
       this.player.setVelocityY(PHYSICS.jumpVelocity);
       try { this.sound.play('jump', { volume: 0.5 }); } catch (_) {}
     }
+
+    // Butterfly patrol
+    this.butterflies?.getChildren().forEach(bf => {
+      if (bf.x >= bf.patrolEndX) {
+        bf.setVelocityX(-80);
+        bf.setFlipX(true);
+      } else if (bf.x <= bf.patrolStartX) {
+        bf.setVelocityX(80);
+        bf.setFlipX(false);
+      }
+    });
 
     this._touchJump = false;
 
