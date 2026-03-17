@@ -20,6 +20,7 @@ export default class GameScene extends Phaser.Scene {
     this._buildBackground(level);
     this._buildPlatforms(level);
     this._buildPlayer(level);
+    this._buildHearts(level);
     this._buildHUD(level);
     this._setupControls();
     this._setupMobileControls();
@@ -56,6 +57,29 @@ export default class GameScene extends Phaser.Scene {
     this.physics.add.collider(this.player, this.platforms);
 
     this.isInvincible = false;
+  }
+
+  _buildHearts(level) {
+    this.heartGroup = this.physics.add.staticGroup();
+    (level.hearts || []).forEach(h => {
+      const heart = this.heartGroup.create(h.x, h.y, 'heart-collect');
+      this.tweens.add({
+        targets: heart,
+        y: h.y - 8,
+        duration: 900,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+        delay: Phaser.Math.Between(0, 500),
+      });
+    });
+
+    this.physics.add.overlap(this.player, this.heartGroup, (player, heart) => {
+      heart.destroy();
+      this.heartsCollected++;
+      this.heartsText.setText(`💕 ${this.heartsCollected} / ${level.hearts.length}`);
+      try { this.sound.play('collect', { volume: 0.6 }); } catch (_) {}
+    });
   }
 
   _buildHUD(level) {
