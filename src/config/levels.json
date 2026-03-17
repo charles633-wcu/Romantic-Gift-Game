@@ -1,0 +1,24 @@
+{
+  "levels": [
+    {
+      "id": 1,
+      "background": "level-1",
+      "note": "Every love story is beautiful, but ours is my favourite. 💕",
+      "platforms": [
+        { "x": 0, "y": 420, "w": 800, "h": 30 },
+        { "x": 150, "y": 330, "w": 120, "h": 20 },
+        { "x": 350, "y": 260, "w": 120, "h": 20 },
+        { "x": 550, "y": 190, "w": 140, "h": 20 }
+      ],
+      "hearts": [
+        { "x": 190, "y": 300 },
+        { "x": 390, "y": 230 },
+        { "x": 570, "y": 160 }
+      ],
+      "butterflies": [
+        { "x": 350, "y": 235, "range": 100 }
+      ],
+      "goal": { "x": 660, "y": 145 }
+    }
+  ]
+}
