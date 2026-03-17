@@ -77,7 +77,7 @@ export default class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.heartGroup, (player, heart) => {
       heart.destroy();
       this.heartsCollected++;
-      this.heartsText.setText(`💕 ${this.heartsCollected} / ${level.hearts.length}`);
+      this.heartsText.setText(`💕 ${this.heartsCollected} / ${(level.hearts || []).length}`);
       try { this.sound.play('collect', { volume: 0.6 }); } catch (_) {}
     });
   }
