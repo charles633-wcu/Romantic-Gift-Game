@@ -112,6 +112,10 @@ function _generateLevelOnce(levelNum) {
   const gapMaxTarget   = Math.min(55 + diff * 5, 160);
   const maxGoombas     = Math.floor(diff * 0.4);
   const maxButterflies = Math.floor(diff * 0.3);
+  const bouncePadProb  = Math.min(0.05 + diff * 0.01, 0.25);
+  const blinkingProb   = Math.min(0.03 + diff * 0.02, 0.25);
+  const conveyorProb   = Math.min(0.03 + diff * 0.02, 0.25);
+  const windmillProb   = Math.min(0.02 + diff * 0.02, 0.30);
 
   // chain is built right-to-left, reversed at the end
   const chain = [];
@@ -215,6 +219,8 @@ function _generateLevelOnce(levelNum) {
   const goombas     = [];
   const butterflies = [];
   let goombaCount = 0, bfCount = 0;
+  const bouncePads  = [];
+  const windmills   = [];
 
   // Skip spawn (index 0) and goal (index last)
   for (let i = 1; i < platforms.length - 1; i++) {
@@ -227,6 +233,7 @@ function _generateLevelOnce(levelNum) {
     }
 
     if (goombaCount < maxGoombas && p.w >= 64 && Math.random() < 0.35) {
+      p.hasGoomba = true;
       const range = Math.min(Math.floor(p.w / 2) - 16, 42);
       goombas.push({ x: Math.floor(p.x + p.w / 2), y: p.y, range, speed: rnd(44, 52 + diff) });
       goombaCount++;
@@ -239,6 +246,10 @@ function _generateLevelOnce(levelNum) {
       butterflies.push({ x: bfX, y: bfY, range: bfRange, speed: rnd(68, 78 + diff * 3) });
       bfCount++;
     }
+
+    if (p.w >= 50 && !p.hasGoomba && Math.random() < bouncePadProb) {
+      bouncePads.push({ x: Math.floor(p.x + p.w / 2), y: p.y - 10 });
+    }
   }
 
   // Star heart every 3rd level
@@ -248,6 +259,50 @@ function _generateLevelOnce(levelNum) {
     const starY = Math.max(50, ref.y - rnd(78, 92));
     starHearts.push({ x: Math.floor(ref.x + ref.w / 2), y: starY });
   }
+
+  // Blinking + conveyor flags (skip spawn index 0 and goal index last)
+  for (let i = 1; i < platforms.length - 1; i++) {
+    const p = platforms[i];
+    if (!p.moving && Math.random() < blinkingProb) {
+      p.blinking = true;
+    } else if (!p.moving && !p.blinking && Math.random() < conveyorProb) {
+      p.conveyor = Math.random() < 0.5 ? 'left' : 'right';
+    }
+  }
+
+  // Windmill placement: snapshot chain pairs before any splicing
+  const chainPairs = [];
+  for (let i = 1; i < platforms.length - 2; i++) {
+    chainPairs.push([platforms[i], platforms[i + 1]]);
+  }
+
+  chainPairs.forEach(([left, right]) => {
+    // Skip bridge platforms (w===80, x<250)
+    if ((left.w === 80 && left.x < 250) || (right.w === 80 && right.x < 250)) return;
+
+    const gap = right.x - (left.x + left.w);
+    if (gap < 90 || Math.random() >= windmillProb) return;
+
+    const cx     = Math.floor(left.x + left.w + gap / 2);
+    const cy     = Math.floor(Math.min(left.y, right.y) - rnd(30, 55));
+    const radius = Math.min(40, Math.floor(gap / 2) - 12);
+    const speed  = 0.4 + Math.random() * (0.1 + diff * 0.02);
+
+    windmills.push({ x: cx, y: cy, radius, speed });
+
+    // Insert 4 arm BFS phantoms BEFORE the goal so isLevelSolvable still checks goal last
+    const armW    = 36;
+    const goalIdx = platforms.length - 1;
+    // Arms at 4 cardinal positions for better BFS coverage
+    [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2].forEach(a => {
+      platforms.splice(goalIdx, 0, {
+        x: Math.floor(cx + Math.cos(a) * radius - armW / 2),
+        y: Math.floor(cy + Math.sin(a) * radius) - 4,
+        w: armW,
+        h: 8,
+      });
+    });
+  });
 
   const goalPlatFinal = platforms[platforms.length - 1];
 
@@ -261,6 +316,8 @@ function _generateLevelOnce(levelNum) {
     butterflies,
     goombas,
     starHearts,
+    bouncePads,
+    windmills,
     goal: { x: Math.floor(goalPlatFinal.x + goalPlatFinal.w / 2), y: goalPlatFinal.y - 28 },
   };
 }
