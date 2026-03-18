@@ -1,21 +1,25 @@
 import { GAME_WIDTH, GAME_HEIGHT, PHYSICS } from '../constants.js';
+import { generateLevel } from '../config/levelGenerator.js';
 
 export default class GameScene extends Phaser.Scene {
   constructor() { super('GameScene'); }
 
   init(data) {
-    this.levels = data.levels || [];
-    this.levelIndex = data.levelIndex || 0;
-    this.lives = 3;
+    this.levelNum        = data.levelNum || 1;
+    this.lives           = 3;
     this.heartsCollected = 0;
   }
 
   create() {
-    const level = this.levels[this.levelIndex];
-    if (!level) {
-      this.scene.start('EndingScene');
-      return;
-    }
+    const level = generateLevel(this.levelNum);
+    const mapW  = level.mapWidth  || GAME_WIDTH;
+    const mapH  = level.mapHeight || GAME_HEIGHT;
+    this.mapH   = mapH;
+
+    // Expand physics world and camera to match generated map dimensions.
+    // Bottom is open (no collision) so the lava-fall death trigger works.
+    this.physics.world.setBounds(0, 0, mapW, mapH + 100);
+    this.physics.world.setBoundsCollision(true, true, true, false);
 
     this._buildBackground(level);
     this._buildPlatforms(level);
@@ -23,18 +27,32 @@ export default class GameScene extends Phaser.Scene {
     this._buildHearts(level);
     this._buildButterflies(level);
     this._buildGoombas(level);
+    this._buildStarHearts(level);
     this._buildGoalPortal(level);
+    this._buildBouncePads(level);
     this._buildHUD(level);
     this._setupControls();
     this._setupMobileControls();
+
+    // Smooth camera follow — bounds keep it from showing void beyond the map.
+    this.cameras.main.setBounds(0, 0, mapW, mapH);
+    this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
   }
 
   _buildBackground(level) {
-    const bgKey = `bg-${level.id}`;
-    this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, bgKey);
+    const bgKey = `bg-${((level.id - 1) % 10) + 1}`;
+    const mapW  = level.mapWidth  || GAME_WIDTH;
+    const mapH  = level.mapHeight || GAME_HEIGHT;
 
-    // Lava strip — visible through ground gaps, always lethal
-    const lava = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT - 8, GAME_WIDTH, 16, 0xff4500).setDepth(1);
+    // Tile the 800×450 background texture across the full world in both axes.
+    for (let bx = 0; bx < mapW; bx += GAME_WIDTH) {
+      for (let by = 0; by < mapH; by += GAME_HEIGHT) {
+        this.add.image(bx + GAME_WIDTH / 2, by + GAME_HEIGHT / 2, bgKey);
+      }
+    }
+
+    // Lava strip at the bottom of the full map.
+    const lava = this.add.rectangle(mapW / 2, mapH - 8, mapW, 16, 0xff4500).setDepth(1);
     this.tweens.add({ targets: lava, alpha: 0.7, duration: 350, yoyo: true, repeat: -1 });
   }
 
@@ -76,17 +94,18 @@ export default class GameScene extends Phaser.Scene {
     const spawnY = (level.platforms[0]?.y || GAME_HEIGHT - 60) - 40;
 
     this.player = this.physics.add.sprite(spawnX, spawnY, 'player');
-    this.physics.world.setBoundsCollision(true, true, true, false); // open bottom for lava
     this.player.setCollideWorldBounds(true);
     this.player.setMaxVelocity(PHYSICS.playerSpeed, 600);
-    this.player.setDragX(1000);
     this.spawnX = spawnX;
     this.spawnY = spawnY;
 
     this.physics.add.collider(this.player, this.platforms);
     this.physics.add.collider(this.player, this.movingPlatforms);
 
-    this.isInvincible = false;
+    this.isInvincible  = false;
+    this._clambering   = false;
+    this._coyoteFrames = 0;
+    this._isDead       = false;
   }
 
   _buildHearts(level) {
@@ -105,6 +124,7 @@ export default class GameScene extends Phaser.Scene {
     });
 
     this.physics.add.overlap(this.player, this.heartGroup, (player, heart) => {
+      if (this._isDead) return;
       heart.destroy();
       this.heartsCollected++;
       this.heartsText.setText(`💕 ${this.heartsCollected} / ${(level.hearts || []).length}`);
@@ -150,7 +170,7 @@ export default class GameScene extends Phaser.Scene {
       // Stomp: player falling and centre above goomba centre
       if (player.body.velocity.y > 50 && player.y < goomba.y) {
         goomba.destroy();
-        this.player.setVelocityY(-320); // bounce up
+        this.player.setVelocityY(PHYSICS.jumpVelocity * 1.3); // stomp bounce: 30% above normal jump
         try { this.sound.play('collect', { volume: 0.5 }); } catch (_) {}
       } else {
         this._loseLife();
@@ -182,30 +202,50 @@ export default class GameScene extends Phaser.Scene {
       this.player.body.enable = false;
 
       this.time.delayedCall(800, () => {
-        this.scene.start('LoveNoteScene', {
-          levels: this.levels,
-          levelIndex: this.levelIndex,
-        });
+        // Persist high score — highest level whose goal the player has reached.
+        const prev = parseInt(localStorage.getItem('martha_highscore') || '0');
+        if (this.levelNum > prev) localStorage.setItem('martha_highscore', String(this.levelNum));
+
+        this.scene.start('LoveNoteScene', { levelNum: this.levelNum });
       });
     });
 
     this._levelComplete = false;
   }
 
+  _buildBouncePads(level) {
+    this.bouncePadGroup = this.physics.add.staticGroup();
+    (level.bouncePads || []).forEach(bp => {
+      const pad = this.bouncePadGroup.create(bp.x, bp.y, null);
+      pad.setDisplaySize(28, 10);
+      pad.refreshBody();
+      this.add.rectangle(bp.x, bp.y, 28, 10, 0x84cc16).setDepth(2);
+    });
+
+    this.physics.add.overlap(this.player, this.bouncePadGroup, () => {
+      if (this._isDead) return;
+      if (this.player.body.velocity.y >= 0) {
+        this.player.setVelocityY(PHYSICS.jumpVelocity * 2.2);
+        try { this.sound.play('jump', { volume: 0.9 }); } catch (_) {}
+      }
+    });
+  }
+
   _buildHUD(level) {
-    this.add.rectangle(GAME_WIDTH / 2, 18, GAME_WIDTH, 36, 0x000000, 0.3);
+    this.add.rectangle(GAME_WIDTH / 2, 18, GAME_WIDTH, 36, 0x000000, 0.3)
+      .setScrollFactor(0).setDepth(9);
 
     this.livesText = this.add.text(12, 18, `💗 x ${this.lives}`, {
       fontSize: '16px', color: '#ffffff',
-    }).setOrigin(0, 0.5).setDepth(10);
+    }).setOrigin(0, 0.5).setDepth(10).setScrollFactor(0);
 
-    this.levelText = this.add.text(GAME_WIDTH / 2, 18, `Level ${level.id} / ${this.levels.length}`, {
+    this.levelText = this.add.text(GAME_WIDTH / 2, 18, `Level ${level.id}`, {
       fontSize: '16px', color: '#ffffff',
-    }).setOrigin(0.5, 0.5).setDepth(10);
+    }).setOrigin(0.5, 0.5).setDepth(10).setScrollFactor(0);
 
     this.heartsText = this.add.text(GAME_WIDTH - 12, 18, `💕 0 / ${level.hearts?.length || 0}`, {
       fontSize: '16px', color: '#ffffff',
-    }).setOrigin(1, 0.5).setDepth(10);
+    }).setOrigin(1, 0.5).setDepth(10).setScrollFactor(0);
   }
 
   _setupControls() {
@@ -216,61 +256,103 @@ export default class GameScene extends Phaser.Scene {
       right: Phaser.Input.Keyboard.KeyCodes.D,
       space: Phaser.Input.Keyboard.KeyCodes.SPACE,
     });
+    this._jumpBuffer   = 0;
+    this._coyoteFrames = 0;
   }
 
   _setupMobileControls() {
     this._touchLeft = false;
     this._touchRight = false;
     this._touchJump = false;
+    this._leftPointerId = null;
+    this._rightPointerId = null;
+    this._jumpPointerId = null;
 
     this.input.on('pointerdown', (ptr) => {
       if (ptr.y > GAME_HEIGHT - 80) {
-        if (ptr.x < GAME_WIDTH / 2) this._touchLeft = true;
-        else this._touchRight = true;
+        if (ptr.x < GAME_WIDTH / 2) { this._touchLeft = true; this._leftPointerId = ptr.id; }
+        else { this._touchRight = true; this._rightPointerId = ptr.id; }
       } else {
-        this._touchJump = true;
+        this._touchJump = true; this._jumpPointerId = ptr.id;
       }
     });
 
     this.input.on('pointerup', (ptr) => {
-      this._touchLeft = false;
-      this._touchRight = false;
-      this._touchJump = false;
+      if (ptr.id === this._leftPointerId)  { this._touchLeft  = false; this._leftPointerId  = null; }
+      if (ptr.id === this._rightPointerId) { this._touchRight = false; this._rightPointerId = null; }
+      if (ptr.id === this._jumpPointerId)  { this._touchJump  = false; this._jumpPointerId  = null; }
     });
 
     const isMobile = this.sys.game.device.input.touch;
     if (isMobile) {
-      this.add.rectangle(GAME_WIDTH / 4, GAME_HEIGHT - 40, GAME_WIDTH / 2, 80, 0xffffff, 0.15).setDepth(20);
-      this.add.rectangle(3 * GAME_WIDTH / 4, GAME_HEIGHT - 40, GAME_WIDTH / 2, 80, 0xffffff, 0.15).setDepth(20);
-      this.add.text(GAME_WIDTH / 4, GAME_HEIGHT - 40, '←', { fontSize: '28px', color: '#ffffff' }).setOrigin(0.5).setDepth(21);
-      this.add.text(3 * GAME_WIDTH / 4, GAME_HEIGHT - 40, '→', { fontSize: '28px', color: '#ffffff' }).setOrigin(0.5).setDepth(21);
+      this.add.rectangle(GAME_WIDTH / 4, GAME_HEIGHT - 40, GAME_WIDTH / 2, 80, 0xffffff, 0.15).setDepth(20).setScrollFactor(0);
+      this.add.rectangle(3 * GAME_WIDTH / 4, GAME_HEIGHT - 40, GAME_WIDTH / 2, 80, 0xffffff, 0.15).setDepth(20).setScrollFactor(0);
+      this.add.text(GAME_WIDTH / 4, GAME_HEIGHT - 40, '←', { fontSize: '28px', color: '#ffffff' }).setOrigin(0.5).setDepth(21).setScrollFactor(0);
+      this.add.text(3 * GAME_WIDTH / 4, GAME_HEIGHT - 40, '→', { fontSize: '28px', color: '#ffffff' }).setOrigin(0.5).setDepth(21).setScrollFactor(0);
     }
   }
 
-  update() {
+  update(time, delta) {
+    if (this._clambering || this._isDead) return;
+
     const onGround = this.player.body.touching.down || this.player.body.blocked.down;
-    const goLeft = this.cursors.left.isDown || this.wasd.left.isDown || this._touchLeft;
+    const goLeft  = this.cursors.left.isDown  || this.wasd.left.isDown  || this._touchLeft;
     const goRight = this.cursors.right.isDown || this.wasd.right.isDown || this._touchRight;
-    const jumpPressed = Phaser.Input.Keyboard.JustDown(this.cursors.up)
+    const jumpJustPressed = Phaser.Input.Keyboard.JustDown(this.cursors.up)
       || Phaser.Input.Keyboard.JustDown(this.wasd.up)
       || Phaser.Input.Keyboard.JustDown(this.wasd.space)
       || Phaser.Input.Keyboard.JustDown(this.cursors.space)
       || this._touchJump;
 
-    if (goLeft) {
-      this.player.setAccelerationX(-1200);
-      this.player.setFlipX(true);
-    } else if (goRight) {
-      this.player.setAccelerationX(1200);
-      this.player.setFlipX(false);
-    } else {
-      this.player.setAccelerationX(0);
+    // --- Coyote time: allow jump for 6 frames after walking off a ledge ---
+    if (onGround) {
+      this._coyoteFrames = 6;
+    } else if (this._coyoteFrames > 0) {
+      this._coyoteFrames--;
     }
 
-    if (jumpPressed && onGround) {
+    // --- Moving platform carry: find platform directly underfoot ---
+    let platformCarryVx = 0;
+    if (onGround) {
+      for (const tile of this.movingPlatforms.getChildren()) {
+        const underfoot = this.player.body.bottom >= tile.body.top - 4
+                       && this.player.body.bottom <= tile.body.top + 6
+                       && this.player.body.right   > tile.body.left
+                       && this.player.body.left    < tile.body.right;
+        if (underfoot) { platformCarryVx = tile.body.velocity.x; break; }
+      }
+    }
+
+    // --- Movement: snap to zero on ground with no input (kills platform-bump drift) ---
+    if (!goLeft && !goRight && onGround) {
+      this.player.setVelocityX(platformCarryVx); // stand still, or ride the platform
+    } else {
+      const inputVx   = goLeft ? -PHYSICS.playerSpeed : (goRight ? PHYSICS.playerSpeed : 0);
+      const targetVx  = inputVx + platformCarryVx;
+      const lerpFactor = onGround ? 0.35 : 0.12;
+      const newVx      = Phaser.Math.Linear(this.player.body.velocity.x, targetVx, lerpFactor);
+      this.player.setVelocityX(Math.abs(newVx) < 1 ? 0 : newVx);
+    }
+
+    if (goLeft)  this.player.setFlipX(true);
+    if (goRight) this.player.setFlipX(false);
+
+    // --- Jump: tiny 3-frame buffer (prevents missed inputs, not long queuing) ---
+    if (jumpJustPressed) this._jumpBuffer = 3;
+    if (this._jumpBuffer > 0) this._jumpBuffer--;
+    if (this._jumpBuffer > 0 && (onGround || this._coyoteFrames > 0)) {
       this.player.setVelocityY(PHYSICS.jumpVelocity);
+      this._jumpBuffer   = 0;
+      this._coyoteFrames = 0;
       try { this.sound.play('jump', { volume: 0.5 }); } catch (_) {}
     }
+
+    // Deplete invincibility bar every frame
+    if (this._invincBarFill && this._invincEndTimer) {
+      this._invincBarFill.scaleX = Math.max(0, 1 - this._invincEndTimer.getProgress());
+    }
+
+    this._checkClamber(onGround, goLeft, goRight);
 
     // Butterfly patrol
     this.butterflies?.getChildren().forEach(bf => {
@@ -301,22 +383,186 @@ export default class GameScene extends Phaser.Scene {
       }
     });
 
-    this._touchJump = false;
-
-    if (this.player.y > GAME_HEIGHT) {
+    if (this.player.y > this.mapH) {
       this._restartLevel(); // lava = instant death
     }
   }
 
+  _buildStarHearts(level) {
+    this.starGroup = this.physics.add.staticGroup();
+    (level.starHearts || []).forEach(s => {
+      const star = this.starGroup.create(s.x, s.y, 'heart-star');
+      // Bob up and down
+      this.tweens.add({
+        targets: star, y: s.y - 8,
+        duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+        delay: Phaser.Math.Between(0, 400),
+      });
+      // Slow spin
+      this.tweens.add({
+        targets: star, angle: 12,
+        duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+      });
+    });
+
+    this.physics.add.overlap(this.player, this.starGroup, (player, star) => {
+      if (this._isDead) return;
+      star.destroy();
+      this._activateInvincibility();
+      try { this.sound.play('collect', { volume: 0.9 }); } catch (_) {}
+    });
+  }
+
+  _activateInvincibility() {
+    const DURATION = 9000;
+    const BAR_W    = 130;
+    const BAR_H    = 7;
+    const BAR_CX   = GAME_WIDTH / 2;
+    const BAR_Y    = 38;
+
+    this.isInvincible = true;
+    this.player.setTint(0xffd700);
+
+    // Tear down any previous invincibility
+    if (this._invincTween)    { this._invincTween.stop(); this._invincTween = null; }
+    if (this._invincEndTimer)  this._invincEndTimer.remove();
+    if (this._invincWarnTimer) this._invincWarnTimer.remove();
+    if (this._invincBarBg)    { this._invincBarBg.destroy();   this._invincBarBg   = null; }
+    if (this._invincBarFill)  { this._invincBarFill.destroy(); this._invincBarFill = null; }
+    if (this._invincIcon)     { this._invincIcon.destroy();    this._invincIcon    = null; }
+
+    // Golden pulse
+    this._invincTween = this.tweens.add({
+      targets: this.player,
+      scaleX: 1.18, scaleY: 1.18,
+      duration: 300, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+    });
+
+    // Progress bar: ⭐ [████████████]
+    this._invincIcon    = this.add.text(BAR_CX - BAR_W / 2 - 14, BAR_Y, '⭐', { fontSize: '12px' })
+                            .setOrigin(0.5).setDepth(10).setScrollFactor(0);
+    this._invincBarBg   = this.add.rectangle(BAR_CX, BAR_Y, BAR_W, BAR_H, 0x222222, 0.8)
+                            .setDepth(10).setScrollFactor(0);
+    this._invincBarFill = this.add.rectangle(BAR_CX - BAR_W / 2, BAR_Y, BAR_W, BAR_H, 0xffd700)
+                            .setOrigin(0, 0.5).setDepth(11).setScrollFactor(0);
+
+    // Warning at 2 s left: pulse faster, bar turns orange
+    this._invincWarnTimer = this.time.delayedCall(DURATION - 2000, () => {
+      if (this._invincTween)   this._invincTween.timeScale = 4;
+      if (this._invincBarFill) this._invincBarFill.setFillStyle(0xff6600);
+    });
+
+    // Expiry
+    this._invincEndTimer = this.time.delayedCall(DURATION, () => {
+      this.isInvincible = false;
+      this.player.clearTint();
+      this.player.setScale(1);
+      if (this._invincTween)   { this._invincTween.stop(); this._invincTween = null; }
+      if (this._invincBarBg)   { this._invincBarBg.destroy();   this._invincBarBg   = null; }
+      if (this._invincBarFill) { this._invincBarFill.destroy(); this._invincBarFill = null; }
+      if (this._invincIcon)    { this._invincIcon.destroy();    this._invincIcon    = null; }
+    });
+  }
+
+  _checkClamber(onGround, goLeft, goRight) {
+    if (onGround || this.isInvincible) return;
+
+    const blockedRight = this.player.body.blocked.right;
+    const blockedLeft  = this.player.body.blocked.left;
+
+    let dir = null;
+    if (blockedRight && goRight) dir = 'right';
+    else if (blockedLeft && goLeft) dir = 'left';
+    if (!dir) return;
+
+    const playerTop   = this.player.body.top;
+    const playerRight = this.player.body.right;
+    const playerLeft  = this.player.body.left;
+
+    const allTiles = [
+      ...this.platforms.getChildren(),
+      ...this.movingPlatforms.getChildren(),
+    ];
+
+    for (const tile of allTiles) {
+      const tileTop  = tile.body.top;
+      // Horizontal: player edge must be within ~14px of tile's near edge
+      const nearRight = dir === 'right' && Math.abs(playerRight - tile.body.left)  < 14;
+      const nearLeft  = dir === 'left'  && Math.abs(playerLeft  - tile.body.right) < 14;
+      if (!nearRight && !nearLeft) continue;
+
+      // Vertical: player top must be 0–28px BELOW the tile top (ledge-grab window)
+      if (playerTop < tileTop || playerTop > tileTop + 28) continue;
+
+      this._startClamber(tile, dir);
+      return;
+    }
+  }
+
+  _startClamber(tile, dir) {
+    this._clambering = true;
+    this.player.setVelocity(0, 0);
+    this.player.body.enable = false;
+
+    // Where to land: sitting on top of the tile, stepped forward a bit
+    const targetY = tile.body.top - this.player.displayHeight / 2;
+    const targetX = this.player.x + (dir === 'right' ? 22 : -22);
+
+    // Phase 1 — pull up (squish = effort)
+    this.tweens.add({
+      targets: this.player,
+      y: targetY,
+      scaleX: 0.78,
+      scaleY: 1.15,
+      duration: 200,
+      ease: 'Cubic.easeOut',
+      onComplete: () => {
+        // Phase 2 — step onto the platform (pop back to normal scale)
+        this.tweens.add({
+          targets: this.player,
+          x: targetX,
+          scaleX: 1,
+          scaleY: 1,
+          duration: 130,
+          ease: 'Back.easeOut',
+          onComplete: () => {
+            this.player.body.reset(targetX, targetY);
+            this.player.body.enable = true;
+            this._clambering = false;
+          },
+        });
+      },
+    });
+  }
+
   _loseLife() {
-    if (this.isInvincible) return;
+    if (this.isInvincible || this._isDead) return;
     this.lives--;
     this.livesText.setText(`💗 x ${this.lives}`);
     if (this.lives <= 0) {
-      this._restartLevel();
+      this._playDeathAnimation();
     } else {
       this._respawnPlayer();
     }
+  }
+
+  _playDeathAnimation() {
+    this._isDead = true;
+    this.player.body.enable = false;
+    this.player.setVelocity(0, 0);
+
+    // Spin and fall off the bottom of the screen
+    this.tweens.add({
+      targets: this.player,
+      y: this.mapH + 80,
+      angle: 720,       // two full rotations
+      scaleX: 0.5,
+      scaleY: 0.5,
+      alpha: 0,
+      duration: 700,
+      ease: 'Cubic.easeIn',
+      onComplete: () => this._restartLevel(),
+    });
   }
 
   _respawnPlayer() {
@@ -341,13 +587,10 @@ export default class GameScene extends Phaser.Scene {
     this.time.delayedCall(500, () => {
       const overlay = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'Try again! 💕', {
         fontSize: '36px', color: '#ffffff', backgroundColor: '#be185d', padding: { x: 20, y: 10 },
-      }).setOrigin(0.5).setDepth(50);
+      }).setOrigin(0.5).setDepth(50).setScrollFactor(0);
 
       this.time.delayedCall(1200, () => {
-        this.scene.start('GameScene', {
-          levels: this.levels,
-          levelIndex: this.levelIndex,
-        });
+        this.scene.start('GameScene', { levelNum: this.levelNum });
       });
     });
   }
