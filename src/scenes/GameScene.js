@@ -15,6 +15,7 @@ export default class GameScene extends Phaser.Scene {
     const mapW  = level.mapWidth  || GAME_WIDTH;
     const mapH  = level.mapHeight || GAME_HEIGHT;
     this.mapH   = mapH;
+    this._conveyorForce = 60 + Math.min(this.levelNum, 30) * 2;
 
     // Expand physics world and camera to match generated map dimensions.
     // Bottom is open (no collision) so the lava-fall death trigger works.
@@ -353,7 +354,7 @@ export default class GameScene extends Phaser.Scene {
       this._coyoteFrames--;
     }
 
-    // --- Moving platform carry: find platform directly underfoot ---
+    // --- Moving platform carry + conveyor belt detection ---
     let platformCarryVx = 0;
     if (onGround) {
       for (const tile of this.movingPlatforms.getChildren()) {
@@ -362,6 +363,18 @@ export default class GameScene extends Phaser.Scene {
                        && this.player.body.right   > tile.body.left
                        && this.player.body.left    < tile.body.right;
         if (underfoot) { platformCarryVx = tile.body.velocity.x; break; }
+      }
+
+      for (const tile of this.platforms.getChildren()) {
+        if (!tile.conveyorDir) continue;
+        const underfoot = this.player.body.bottom >= tile.body.top - 4
+                       && this.player.body.bottom <= tile.body.top + 6
+                       && this.player.body.right   > tile.body.left
+                       && this.player.body.left    < tile.body.right;
+        if (underfoot) {
+          platformCarryVx += tile.conveyorDir === 'right' ? this._conveyorForce : -this._conveyorForce;
+          break;
+        }
       }
     }
 
