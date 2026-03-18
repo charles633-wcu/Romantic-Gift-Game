@@ -31,6 +31,7 @@ export default class GameScene extends Phaser.Scene {
     this._buildStarHearts(level);
     this._buildGoalPortal(level);
     this._buildBouncePads(level);
+    this._buildWindmills(level);
     this._buildHUD(level);
     this._setupControls();
     this._setupMobileControls();
@@ -274,6 +275,36 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
+  _buildWindmills(level) {
+    this._windmillArms = [];
+
+    (level.windmills || []).forEach(wm => {
+      // Hub
+      this.add.circle(wm.x, wm.y, 8, 0x6b7280).setDepth(2);
+
+      // 2 visual arms (at 0 and PI) that rotate through all positions at runtime.
+      // The generator inserts 4 BFS phantom platforms (at 0, PI/2, PI, 3*PI/2) for
+      // validation coverage — these are static snapshots only, not extra visual arms.
+      const armW = 36, armH = 8;
+      [0, Math.PI].forEach(startAngle => {
+        const visual = this.add.rectangle(
+          wm.x + Math.cos(startAngle) * wm.radius,
+          wm.y + Math.sin(startAngle) * wm.radius,
+          armW, armH, 0x94a3b8
+        ).setDepth(2);
+
+        this._windmillArms.push({
+          visual,
+          cx: wm.x, cy: wm.y,
+          radius: wm.radius,
+          angle: startAngle,
+          speed: wm.speed,
+          w: armW, h: armH,
+        });
+      });
+    });
+  }
+
   _buildHUD(level) {
     this.add.rectangle(GAME_WIDTH / 2, 18, GAME_WIDTH, 36, 0x000000, 0.3)
       .setScrollFactor(0).setDepth(9);
@@ -426,6 +457,39 @@ export default class GameScene extends Phaser.Scene {
       if (tile.x <= tile.startX - tile.moveRange) tile.moveDir =  1;
       tile.body.setVelocityX(tile.moveDir * tile.moveSpeed);
     });
+
+    // Windmill: advance arm angles, reposition visuals, carry player
+    for (const arm of (this._windmillArms || [])) {
+      arm.angle += arm.speed * (delta / 1000); // clockwise, delta is ms
+
+      const ax = arm.cx + Math.cos(arm.angle) * arm.radius;
+      const ay = arm.cy + Math.sin(arm.angle) * arm.radius;
+      arm.visual.setPosition(ax, ay);
+
+      const armTop   = ay - arm.h / 2;
+      const armLeft  = ax - arm.w / 2;
+      const armRight = ax + arm.w / 2;
+      const onArm    = !this._isDead
+                    && this.player.body.bottom >= armTop - 4
+                    && this.player.body.bottom <= armTop + 8
+                    && this.player.body.right   > armLeft
+                    && this.player.body.left    < armRight
+                    && this.player.body.velocity.y >= -50;
+
+      if (onArm) {
+        // Snap to surface and counteract gravity. body.reset() zeroes velocity —
+        // intentional: the arm fully controls the player while riding.
+        this.player.y = armTop - this.player.displayHeight / 2;
+        this.player.body.reset(this.player.x, this.player.y);
+
+        // Horizontal tangential velocity only. setVelocityY(0) counteracts gravity
+        // accumulation while riding — vertical launch is not applied intentionally.
+        // The player exits the arm by jumping (velocity.y < -50 breaks onArm).
+        const tvx =  Math.sin(arm.angle) * arm.radius * arm.speed;
+        this.player.setVelocityX(tvx);
+        this.player.setVelocityY(0);
+      }
+    }
 
     // Goomba patrol
     this.goombas?.getChildren().forEach(g => {
