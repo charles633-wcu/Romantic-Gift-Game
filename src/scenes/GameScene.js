@@ -80,10 +80,52 @@ export default class GameScene extends Phaser.Scene {
         }
       } else {
         const tilesNeeded = Math.ceil(p.w / 32);
+        const blinkTiles  = [];
         for (let i = 0; i < tilesNeeded; i++) {
           const tile = this.platforms.create(p.x + i * 32 + 16, p.y + p.h / 2, 'platform');
           tile.setDisplaySize(32, p.h);
           tile.refreshBody();
+          if (p.blinking) {
+            blinkTiles.push(tile);
+          }
+          if (p.conveyor) {
+            tile.conveyorDir = p.conveyor;
+          }
+        }
+
+        if (p.blinking && blinkTiles.length > 0) {
+          const cycleOn  = 1500;
+          const cycleOff = 1000;
+          const phase    = Phaser.Math.Between(0, 2500);
+
+          this.time.delayedCall(phase, () => {
+            const blink = () => {
+              this.tweens.add({
+                targets: blinkTiles,
+                alpha: 0.3,
+                duration: 75,
+                yoyo: true,
+                repeat: 1,
+                onComplete: () => {
+                  blinkTiles.forEach(t => { t.setAlpha(0); t.body.enable = false; });
+                  this.time.delayedCall(cycleOff, () => {
+                    blinkTiles.forEach(t => { t.setAlpha(1); t.body.enable = true; });
+                    this.time.delayedCall(cycleOn - 300, blink);
+                  });
+                },
+              });
+            };
+            this.time.delayedCall(cycleOn - 300, blink);
+          });
+        }
+
+        if (p.conveyor) {
+          const arrowChar = p.conveyor === 'right' ? '→' : '←';
+          const arrowX    = Math.floor(p.x + p.w / 2);
+          const arrowY    = p.y - 2;
+          this.add.text(arrowX, arrowY, arrowChar, {
+            fontSize: '11px', color: '#ffffff',
+          }).setOrigin(0.5, 1).setDepth(2);
         }
       }
     });
