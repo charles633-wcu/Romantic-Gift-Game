@@ -1,0 +1,7 @@
+{"type":"server-started","port":50700,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:50700","screen_dir":"C:/Users/czw53/PycharmProjects/Martha_Project/.superpowers/brainstorm/904-1773740117"}
+{"type":"screen-added","file":"C:\\Users\\czw53\\PycharmProjects\\Martha_Project\\.superpowers\\brainstorm\\904-1773740117\\visual-style.html"}
+{"source":"user-event","type":"click","text":"🌸💕✨\n    \n    \n      B — Cute / Kawaii\n      Soft pastel colors, rounded shapes, adorable characters. Think Studio Ghibli meets a mobile game.","choice":"kawaii","id":null,"timestamp":1773740298264}
+{"type":"screen-added","file":"C:\\Users\\czw53\\PycharmProjects\\Martha_Project\\.superpowers\\brainstorm\\904-1773740117\\game-screens.html"}
+{"type":"screen-added","file":"C:\\Users\\czw53\\PycharmProjects\\Martha_Project\\.superpowers\\brainstorm\\904-1773740117\\platformer-detail.html"}
+{"type":"screen-added","file":"C:\\Users\\czw53\\PycharmProjects\\Martha_Project\\.superpowers\\brainstorm\\904-1773740117\\waiting-1.html"}
+{"type":"server-stopped","reason":"idle timeout"}
