@@ -13,12 +13,12 @@ A fully offline-capable infinite platformer built as a personal gift. Designed a
    export const HER_NAME = 'Their_Name'; // ← change this to his/her name before gifting
    ```
 3. Messages file is located at 'romantic-game\src\config\messages.js'
-4. ```js
+4. 
   export const MESSAGES = [
   "Add messages here",
   "Add as many as you like!
   ];
-  ```
+  
 > Installable directly from the browser as a PWA. No app store required.
 
 ---
@@ -192,6 +192,8 @@ Set `DEV_MODE = false` in `src/constants.js` to hide developer UI and disable sh
 ```js
 export const DEV_MODE = false; // ← set to false before gifting
 ```
-#   R o m a n t i c - G i f t - G a m e  
- #   R o m a n t i c - G i f t - G a m e  
+#   R o m a n t i c - G i f t - G a m e 
+ 
+ #   R o m a n t i c - G i f t - G a m e 
+ 
  
