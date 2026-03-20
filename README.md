@@ -8,13 +8,19 @@ Gift your soul-mate a game just for them!
 A fully offline-capable infinite platformer built as a personal gift. Designed and engineered from scratch using Phaser 3, vanilla JavaScript, and the Web Audio API — no build tools, no bundler, no dependencies beyond the game engine itself.
 
 ## Personalize It!
-1. Constants file is located at 'romantic-game/src/constants.js'
+
+1. Constants file is located at `romantic-game/src/constants.js`
 2. ```js
    export const HER_NAME = 'Their_Name'; // ← change this to his/her name before gifting
    ```
-3. Messages file is located at 'romantic-game\src\config\messages.js'
-4. 
-  
+3. Messages file is located at `romantic-game/src/config/messages.js`
+4. ```js
+   export const MESSAGES = [
+     "Add messages here",
+     "Add as many as you like!",
+   ];
+   ```
+
 > Installable directly from the browser as a PWA. No app store required.
 
 ---
@@ -188,6 +194,3 @@ Set `DEV_MODE = false` in `src/constants.js` to hide developer UI and disable sh
 ```js
 export const DEV_MODE = false; // ← set to false before gifting
 ```
-
- 
- 
