@@ -1,4 +1,6 @@
-export const HER_NAME = 'Martha'; // ← change this to her name
+export const HER_NAME = 'NAME'; // ← change this to his/her name before gifting
+export const STORAGE_PREFIX = 'love_story'; // localStorage key prefix
+export const DEV_MODE = false;    // unlocked at runtime via PIN on the menu
 
 export const GAME_WIDTH = 800;
 export const GAME_HEIGHT = 450;

@@ -1,8 +1,7 @@
 import { GAME_WIDTH, GAME_HEIGHT } from '../constants.js';
 
 // ↓ Write your final romantic message here
-const FINAL_MESSAGE = "Thank you for being the best part of my every day.\nI love you more than words can say. 💕";
-
+const FINAL_MESSAGE = "Every jump, every heart collected, was a step in our love story. I'm so grateful for every moment with you, and I can't wait for all the adventures still to come. I love you endlessly 💕";
 export default class EndingScene extends Phaser.Scene {
   constructor() { super('EndingScene'); }
 

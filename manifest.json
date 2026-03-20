@@ -1,0 +1,18 @@
+{
+  "name": "A Love Story",
+  "short_name": "A Love Story",
+  "description": "A romantic platformer made just for you 💕",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#1a1a2e",
+  "theme_color": "#ec4899",
+  "icons": [
+    {
+      "src": "assets/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

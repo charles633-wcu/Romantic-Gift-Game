@@ -1,4 +1,6 @@
 // src/config/levelGenerator.js
+import { getBiome } from './biomes.js';
+import { GAME_WIDTH, GAME_HEIGHT } from '../constants.js';
 
 const GRAVITY    = 1000;
 const JUMP_V     = 460;
@@ -72,38 +74,20 @@ function isLevelSolvable(level) {
   return reachable[n - 1];
 }
 
-// ─── Orientation & Map Dimensions ────────────────────────────────────────────
-
-function getOrientation() {
-  const r = Math.random();
-  if (r < 0.333) return 'wide';
-  if (r < 0.666) return 'tall';
-  return 'both';
-}
-
-function getMapDimensions(diff, orientation) {
-  switch (orientation) {
-    case 'wide': return { mapWidth: 800 + diff * 90,  mapHeight: 450 };
-    case 'tall': return { mapWidth: 800 + diff * 20,  mapHeight: 450 + diff * 40 };
-    case 'both': return { mapWidth: 800 + diff * 60,  mapHeight: 450 + diff * 25 };
-  }
-}
-
-function getGoalPosition(mapWidth, mapHeight, orientation) {
-  switch (orientation) {
-    case 'wide': return { x: mapWidth - 130,                      y: mapHeight - 80 - rnd(0, 60) };
-    case 'tall': return { x: Math.floor(mapWidth / 2) - 45,       y: 80 + rnd(0, 40) };
-    case 'both': return { x: mapWidth - 130,                      y: 80 + rnd(0, 60) };
-  }
-}
 
 // ─── Backward Chain Generator ─────────────────────────────────────────────────
 
 function _generateLevelOnce(levelNum) {
-  const diff = Math.min(levelNum, 30);
+  const diff      = levelNum;
+  const mapWidth  = GAME_WIDTH  + levelNum * 80;
+  const mapHeight = GAME_HEIGHT + levelNum * 70;
 
-  const orientation            = getOrientation();
-  const { mapWidth, mapHeight } = getMapDimensions(diff, orientation);
+  // Wave parameters: amplitude grows with difficulty, creating rolling hills
+  // waveAmplitude=0 at diff=0 (flat), ~90px at diff=30 (dramatic hills)
+  const waveAmplitude = diff * 3;
+  // waveCycles: how many full up-down-up cycles across the level
+  // 0.5 at diff=0 (one gentle arc), ~2.6 at diff=30 (multiple peaks & valleys)
+  const waveCycles    = 0.5 + diff * 0.07;
 
   const platWMin       = Math.max(38,  90 - diff * 1.8);
   const platWMax       = Math.max(58, 115 - diff * 1.5);
@@ -116,38 +100,68 @@ function _generateLevelOnce(levelNum) {
   const blinkingProb   = Math.min(0.03 + diff * 0.02, 0.25);
   const conveyorProb   = Math.min(0.03 + diff * 0.02, 0.25);
   const windmillProb   = Math.min(0.02 + diff * 0.02, 0.30);
+  const towerProb      = Math.min(0.10 + levelNum * 0.008, 0.35);
 
   // chain is built right-to-left, reversed at the end
   const chain = [];
 
-  // Place goal platform
-  const goalPos = getGoalPosition(mapWidth, mapHeight, orientation);
+  // Place goal platform — rightmost column, random height
   const goalW   = 90;
-  const goalPlat = { x: goalPos.x, y: goalPos.y, w: goalW, h: 15 };
+  const goalPlat = { x: mapWidth - 130, y: rnd(90, mapHeight - 80), w: goalW, h: 15 };
   chain.push(goalPlat);
 
   let rightPlat = goalPlat;
 
   // Build backwards until we reach the spawn zone
+  let forcedNextY = null; // set after tower insertion to enforce mandatory path
   while (rightPlat.x > 110) {
+
+    // ── Tower insertion ───────────────────────────────────────────────────────
+    if (Math.random() < towerProb) {
+      let N = rnd(3, 4);
+      // Reduce N if the bottom rung would fall below the map floor
+      while (N >= 2 && rightPlat.y + N * 90 > mapHeight - 80) N--;
+      const towerX = rightPlat.x - 50 - rnd(0, 15);
+      if (N >= 2 && towerX > 110) {
+        const topRungY = rightPlat.y + 90; // tower top sits just below rightPlat
+        // Push rungs top-first. tower top = rightPlat.y+90, bottom = rightPlat.y+N*90.
+        for (let r = 0; r < N; r++) {
+          chain.push({ x: towerX, y: rightPlat.y + (r + 1) * 90, w: 50, h: 15, tower: true });
+        }
+        // Use bottom rung as rightPlat so the next platform is reachable from the base.
+        // Also record tower top so the next platform is placed too high to bypass the tower.
+        rightPlat    = chain[chain.length - 1]; // bottom rung
+        forcedNextY  = topRungY - rnd(80, 105); // near tower top, unreachable from tower base
+        continue;
+      }
+    }
+
+    // ── Normal platform ───────────────────────────────────────────────────────
     const nw = rnd(Math.floor(platWMin), Math.floor(platWMax));
 
     // Choose rise_target: how much higher rightPlat is than the new (left) platform.
     // rise_target > 0  → ny > rightPlat.y → new platform is LOWER on screen
     // rise_target < 0  → ny < rightPlat.y → new platform is HIGHER on screen
     let riseTarget;
-    if (rightPlat.y < 130) {
+    if (forcedNextY !== null) {
+      // Post-tower: place this platform near tower-top height so only the tower path
+      // can reach the platforms to the right (tower base → climb → tower top → rightPlat).
+      riseTarget  = Math.max(90, Math.min(mapHeight - 80, forcedNextY)) - rightPlat.y;
+      forcedNextY = null;
+    } else if (rightPlat.y < 130) {
       // Chain is near the top — place new platform LOWER to give room (riseTarget > 0 → ny larger)
       riseTarget = rnd(10, 50);
     } else if (rightPlat.y > mapHeight - 80) {
       // Chain is near the bottom — place new platform HIGHER (riseTarget < 0 → ny smaller)
       riseTarget = rnd(-65, -15);
     } else {
-      switch (orientation) {
-        case 'wide': riseTarget = rnd(-20, 40); break;
-        case 'tall': riseTarget = rnd(20,  75); break;
-        case 'both': riseTarget = rnd(-30, 75); break;
-      }
+      // Sine-wave vertical bias: positive → left platform is lower → player climbs at this x.
+      // forwardProgress≈1 near the goal, ≈0 near spawn, so the wave traces left-to-right.
+      const forwardProgress = rightPlat.x / mapWidth;
+      const waveValue = Math.sin(forwardProgress * 2 * Math.PI * waveCycles); // −1 to 1
+      const baseRise  = Math.round(waveValue * waveAmplitude);
+      const jitter    = rnd(-20, 20);
+      riseTarget = baseRise + jitter;
     }
 
     // New platform y: rightPlat.y + riseTarget (positive riseTarget = lower on screen)
@@ -260,9 +274,10 @@ function _generateLevelOnce(levelNum) {
     starHearts.push({ x: Math.floor(ref.x + ref.w / 2), y: starY });
   }
 
-  // Blinking + conveyor flags (skip spawn index 0 and goal index last)
+  // Blinking + conveyor flags (skip spawn index 0, goal index last, and tower rungs)
   for (let i = 1; i < platforms.length - 1; i++) {
     const p = platforms[i];
+    if (p.tower) continue; // tower rungs must never disappear or slide the player off
     if (!p.moving && Math.random() < blinkingProb) {
       p.blinking = true;
     } else if (!p.moving && !p.blinking && Math.random() < conveyorProb) {
@@ -290,25 +305,52 @@ function _generateLevelOnce(levelNum) {
 
     windmills.push({ x: cx, y: cy, radius, speed });
 
-    // Insert 4 arm BFS phantoms BEFORE the goal so isLevelSolvable still checks goal last
+    // Insert 4 arm BFS phantoms BEFORE the goal so isLevelSolvable still checks goal last.
+    // phantom:true prevents GameScene from rendering them as real platforms.
     const armW    = 36;
     const goalIdx = platforms.length - 1;
-    // Arms at 4 cardinal positions for better BFS coverage
     [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2].forEach(a => {
       platforms.splice(goalIdx, 0, {
         x: Math.floor(cx + Math.cos(a) * radius - armW / 2),
         y: Math.floor(cy + Math.sin(a) * radius) - 4,
         w: armW,
         h: 8,
+        phantom: true,
       });
     });
   });
+
+  // ── Ladders ───────────────────────────────────────────────────────────────
+  const ladders = [];
+  for (let i = 1; i < platforms.length - 2; i++) {
+    const p0 = platforms[i];
+    const p1 = platforms[i + 1];
+    if (p0.phantom || p1.phantom) continue;
+
+    // Tower rungs at the same x always get a ladder — bypass hGap check entirely.
+    if (p0.tower && p1.tower && p0.x === p1.x) {
+      const upper = p0.y < p1.y ? p0 : p1;
+      const lower = p0.y < p1.y ? p1 : p0;
+      ladders.push({ x: p0.x + 25, topY: upper.y, bottomY: lower.y });
+      continue;
+    }
+
+    // General organic ladder: raised threshold to 80px (was 55, broke at gapMin > 55 at L15+)
+    const hGap = p1.x - (p0.x + p0.w);
+    const vGap = Math.abs(p0.y - p1.y);
+    if (hGap >= 0 && hGap < 80 && vGap >= 50 && vGap < 200 && Math.random() < 0.3) {
+      const upper    = p0.y < p1.y ? p0 : p1;
+      const lower    = p0.y < p1.y ? p1 : p0;
+      const ladderX  = p0.x + p0.w + Math.floor(hGap / 2);
+      ladders.push({ x: ladderX, topY: upper.y, bottomY: lower.y });
+    }
+  }
 
   const goalPlatFinal = platforms[platforms.length - 1];
 
   return {
     id:          levelNum,
-    background:  `bg-${((levelNum - 1) % 10) + 1}`,
+    background:  `bg-${getBiome()}`,
     mapWidth,
     mapHeight,
     platforms,
@@ -318,17 +360,49 @@ function _generateLevelOnce(levelNum) {
     starHearts,
     bouncePads,
     windmills,
+    ladders,
     goal: { x: Math.floor(goalPlatFinal.x + goalPlatFinal.w / 2), y: goalPlatFinal.y - 28 },
+  };
+}
+
+function _minimalSafeLevel(levelNum) {
+  const mapWidth  = GAME_WIDTH  + levelNum * 80;
+  const mapHeight = GAME_HEIGHT + levelNum * 70;
+  const spawnY    = mapHeight - 80;
+  const goalX     = mapWidth - 130;
+  const platforms = [
+    { x: 10,    y: spawnY, w: 100, h: 15 },  // spawn
+    { x: 220,   y: spawnY, w: 80,  h: 15 },
+    { x: 400,   y: spawnY, w: 80,  h: 15 },
+    { x: goalX, y: spawnY, w: 90,  h: 15 },  // goal
+  ];
+  return {
+    id:          levelNum,
+    background:  `bg-${getBiome()}`,
+    mapWidth,
+    mapHeight,
+    platforms,
+    hearts:      [],
+    butterflies: [],
+    goombas:     [],
+    starHearts:  [],
+    bouncePads:  [],
+    windmills:   [],
+    ladders:     [],
+    goal: {
+      x: Math.floor(goalX + 45),
+      y: spawnY - 28,
+    },
   };
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export function generateLevel(levelNum) {
-  let last = null;
-  for (let attempt = 0; attempt < 4; attempt++) {
-    last = _generateLevelOnce(levelNum);
-    if (isLevelSolvable(last)) return last;
+  for (let attempt = 0; attempt < 15; attempt++) {
+    const level = _generateLevelOnce(levelNum);
+    if (isLevelSolvable(level)) return level;
   }
-  return last; // silent fallback — BFS rarely fails with backward gen
+  console.warn(`[levelGenerator] All 15 attempts failed for level ${levelNum}, using safe fallback.`);
+  return _minimalSafeLevel(levelNum);
 }

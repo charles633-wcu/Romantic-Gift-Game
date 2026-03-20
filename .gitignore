@@ -1,0 +1,12 @@
+.DS_Store
+Thumbs.db
+node_modules/
+*.log
+specs
+plans
+.venv
+.superpowers
+.claude
+CLAUDE.md
+docs/
+_PROJECT_DOCS
