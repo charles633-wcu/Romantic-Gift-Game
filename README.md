@@ -192,3 +192,5 @@ Set `DEV_MODE = false` in `src/constants.js` to hide developer UI and disable sh
 ```js
 export const DEV_MODE = false; // ← set to false before gifting
 ```
+#   R o m a n t i c - G i f t - G a m e  
+ 
